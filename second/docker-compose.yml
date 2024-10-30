@@ -1,0 +1,94 @@
+name: test_php_8
+services:
+    app:
+        restart: on-failure
+        build:
+            context: .
+            dockerfile: Dockerfile
+        environment:
+            APP_ENV: ${APP_ENV:-local}
+        volumes:
+            - ./nginx.conf:/etc/nginx/nginx.conf
+            - .:/var/www
+        networks:
+            - default
+        depends_on:
+            - postgresql
+        links:
+            - minio
+            - mailpit
+
+    nginx:
+        image: nginx:latest
+        ports:
+            - "${APP_PORT:-83}:80"
+        volumes:
+            - ./nginx.conf:/etc/nginx/nginx.conf
+            - .:/var/www
+        depends_on:
+            - app
+        networks:
+            - default
+
+    postgresql:
+        restart: on-failure
+        image: postgres:16
+        environment:
+            POSTGRES_USER: ${DB_USERNAME:-ivanchido}
+            POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+            POSTGRES_DB: ${DB_DATABASE:-ivanchido}
+            POSTGRES_PORT: ${DB_PORT:-5433}
+        expose:
+            - ${DB_PORT:-5432}
+        volumes:
+            - data-postgresql:/var/lib/postgresql/data
+        networks:
+            - default
+
+    minio:
+        restart: on-failure
+        image: minio/minio
+        expose:
+            - 9000
+        ports:
+            - ${MINIO_CONSOLE_PORT:-8800}:8900
+        environment:
+            MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+            MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio123}
+        volumes:
+            - data-minio:/data/minio
+        networks:
+            - default
+        command: minio server /data/minio --console-address ":${MINIO_CONSOLE_PORT:-8900}"
+        healthcheck:
+            test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+            retries: 3
+            timeout: 5s
+
+    mailpit:
+        restart: on-failure
+        image: axllent/mailpit
+        expose:
+            - 1025
+        ports:
+            - "${MAILPIT_DASHBOARD_PORT:-8026}:8025"
+
+    pgadmin:
+        restart: on-failure
+        image: dpage/pgadmin4
+        environment:
+            PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-mamaniperezivan@gmail.com}
+            PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-secret}
+        ports:
+            - ${PGADMIN_PORT:-5051}:80
+        networks:
+            - default
+        depends_on:
+            - postgresql
+
+networks:
+    default:
+        driver: bridge
+volumes:
+    data-minio:
+    data-postgresql:
